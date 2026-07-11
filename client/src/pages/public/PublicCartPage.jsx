@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getCustomers, registerCustomer, placeOrder, getActiveOrders } from '../../api/publicApi';
+import { signupCustomer, loginCustomer, placeOrder, getActiveOrders } from '../../api/publicApi';
 import {
   HiOutlineShoppingCart, HiOutlineTrash, HiOutlineMinus, HiOutlinePlus,
-  HiOutlineUserAdd, HiOutlineClipboardList, HiOutlineArrowLeft, HiOutlineCheck
+  HiOutlineUserAdd, HiOutlineClipboardList, HiOutlineArrowLeft,
+  HiOutlineLockClosed, HiOutlineMail, HiOutlinePhone, HiOutlineUser,
+  HiOutlineHome, HiOutlineLogout
 } from 'react-icons/hi';
 import toast from 'react-hot-toast';
 import io from 'socket.io-client';
@@ -11,16 +13,38 @@ import { formatCurrency } from '../../utils/helpers';
 
 const PublicCartPage = () => {
   const [cart, setCart] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', street: '', city: '', pincode: '' });
+  
+  // Customer Auth States
+  const [currentCustomer, setCurrentCustomer] = useState(null);
+  const [activeTab, setActiveTab] = useState('login'); // 'login' or 'signup'
+  
+  // Form inputs state
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [signupForm, setSignupForm] = useState({
+    name: '', email: '', phone: '', password: '',
+    street: '', city: '', state: 'ON', pincode: ''
+  });
   
   // Real-time tracking State
   const [activeOrders, setActiveOrders] = useState([]);
   const socketRef = useRef(null);
 
-  // Load cart from local storage
+  // Load cart and check active customer session
+  useEffect(() => {
+    loadCart();
+    
+    // Check if customer is already logged in
+    const savedCustomer = localStorage.getItem('ck_customer');
+    if (savedCustomer) {
+      try {
+        const parsed = JSON.parse(savedCustomer);
+        setCurrentCustomer(parsed);
+      } catch (e) {
+        console.error('Failed to parse customer session:', e);
+      }
+    }
+  }, []);
+
   const loadCart = () => {
     const saved = localStorage.getItem('ck_cart');
     if (saved) {
@@ -32,34 +56,11 @@ const PublicCartPage = () => {
     }
   };
 
-  useEffect(() => {
-    loadCart();
-    fetchCustomersList();
-  }, []);
-
   const saveCart = (newCart) => {
     setCart(newCart);
     localStorage.setItem('ck_cart', JSON.stringify(newCart));
     // Trigger custom event so navbar can update badge
     window.dispatchEvent(new Event('cartUpdate'));
-  };
-
-  const fetchCustomersList = async () => {
-    try {
-      const { data } = await getCustomers();
-      setCustomers(data.data);
-      if (data.data.length > 0) {
-        // Auto-select Amit Shah if present, otherwise first customer
-        const amit = data.data.find(c => c.phone === '8765432102' || c.name.toLowerCase().includes('amit'));
-        if (amit) {
-          setSelectedCustomerId(amit._id);
-        } else {
-          setSelectedCustomerId(data.data[0]._id);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load customers:', error);
-    }
   };
 
   const fetchCustomerOrders = async (cid) => {
@@ -74,17 +75,21 @@ const PublicCartPage = () => {
 
   // Socket connection to listen for order status updates
   useEffect(() => {
-    if (!selectedCustomerId) return;
-    fetchCustomerOrders(selectedCustomerId);
+    if (!currentCustomer) {
+      setActiveOrders([]);
+      return;
+    }
+    
+    fetchCustomerOrders(currentCustomer._id);
 
-    const socketHost = window.location.origin.includes('5173')
+    const socketHost = window.location.origin.includes('5173') || window.location.origin.includes('5174')
       ? 'http://localhost:5000'
       : window.location.origin;
     
     socketRef.current = io(socketHost);
 
     socketRef.current.on('connect', () => {
-      socketRef.current.emit('join', selectedCustomerId);
+      socketRef.current.emit('join', currentCustomer._id);
     });
 
     socketRef.current.on('orderStatusUpdated', ({ orderId, status }) => {
@@ -92,12 +97,12 @@ const PublicCartPage = () => {
         icon: '🍳',
         duration: 4000
       });
-      fetchCustomerOrders(selectedCustomerId);
+      fetchCustomerOrders(currentCustomer._id);
     });
 
     socketRef.current.on('orderUpdate', (updatedOrder) => {
-      if (updatedOrder.customerId === selectedCustomerId) {
-        fetchCustomerOrders(selectedCustomerId);
+      if (updatedOrder.customerId === currentCustomer._id) {
+        fetchCustomerOrders(currentCustomer._id);
       }
     });
 
@@ -106,7 +111,7 @@ const PublicCartPage = () => {
         socketRef.current.disconnect();
       }
     };
-  }, [selectedCustomerId]);
+  }, [currentCustomer]);
 
   const updateCartQty = (itemId, change) => {
     const updated = cart.map(i => {
@@ -131,8 +136,8 @@ const PublicCartPage = () => {
 
   const handleCheckout = async (e) => {
     e.preventDefault();
-    if (!selectedCustomerId) {
-      toast.error('Please select or register a customer account');
+    if (!currentCustomer) {
+      toast.error('Please sign in or sign up first');
       return;
     }
     if (cart.length === 0) {
@@ -140,11 +145,8 @@ const PublicCartPage = () => {
       return;
     }
 
-    const customerObj = customers.find(c => c._id === selectedCustomerId);
-    if (!customerObj) return;
-
     const orderData = {
-      customerId: selectedCustomerId,
+      customerId: currentCustomer._id,
       homeCookId: cart[0].homeCookId._id || cart[0].homeCookId,
       items: cart.map(i => ({
         name: i.name,
@@ -153,10 +155,10 @@ const PublicCartPage = () => {
       })),
       totalAmount: getCartTotal(),
       deliveryAddress: {
-        street: customerObj.addresses?.[0]?.street || '123 Main St',
-        city: customerObj.addresses?.[0]?.city || 'Kitchener',
-        state: customerObj.addresses?.[0]?.state || 'ON',
-        pincode: customerObj.addresses?.[0]?.pincode || 'N2M 3L5'
+        street: signupForm.street || '22 Andheri West',
+        city: signupForm.city || 'Mumbai',
+        state: signupForm.state || 'Maharashtra',
+        pincode: signupForm.pincode || '400058'
       },
       paymentMethod: 'cod',
       paymentStatus: 'pending',
@@ -165,48 +167,72 @@ const PublicCartPage = () => {
 
     try {
       await placeOrder(orderData);
-      toast.success('Order placed successfully! tracking is live.', {
+      toast.success('Order placed successfully! live tracking started.', {
         icon: '🎉',
         duration: 5000
       });
       saveCart([]);
-      fetchCustomerOrders(selectedCustomerId);
+      fetchCustomerOrders(currentCustomer._id);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to place order');
     }
   };
 
-  const handleRegisterCustomer = async (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (!newCustomer.name || !newCustomer.email || !newCustomer.phone) {
-      toast.error('Name, Email and Phone are required');
+    if (!loginForm.email || !loginForm.password) {
+      toast.error('Please fill in all credentials');
+      return;
+    }
+    try {
+      const { data } = await loginCustomer(loginForm);
+      toast.success(`Welcome back, ${data.data.name}!`);
+      setCurrentCustomer(data.data);
+      localStorage.setItem('ck_customer', JSON.stringify(data.data));
+      localStorage.setItem('ck_customer_token', data.data.token);
+      setLoginForm({ email: '', password: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Incorrect email or password');
+    }
+  };
+
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    if (!signupForm.name || !signupForm.email || !signupForm.password || !signupForm.phone) {
+      toast.error('Name, Email, Phone and Password are required');
       return;
     }
     try {
       const address = {
-        label: 'Home',
-        street: newCustomer.street || '456 West Rd',
-        city: newCustomer.city || 'Waterloo',
-        state: newCustomer.state || 'ON',
-        pincode: newCustomer.pincode || 'N2L 3G1'
+        street: signupForm.street || '456 West Rd',
+        city: signupForm.city || 'Waterloo',
+        state: signupForm.state || 'ON',
+        pincode: signupForm.pincode || 'N2L 3G1'
       };
 
-      const { data } = await registerCustomer({
-        name: newCustomer.name,
-        email: newCustomer.email,
-        phone: newCustomer.phone,
+      const { data } = await signupCustomer({
+        name: signupForm.name,
+        email: signupForm.email,
+        phone: signupForm.phone,
+        password: signupForm.password,
         address
       });
 
-      toast.success(`Customer "${newCustomer.name}" registered!`);
-      setShowNewCustomerModal(false);
-      setNewCustomer({ name: '', email: '', phone: '', street: '', city: '', pincode: '' });
-      
-      await fetchCustomersList();
-      setSelectedCustomerId(data.data._id);
+      toast.success(`Account created successfully! Welcome, ${signupForm.name}.`);
+      setCurrentCustomer(data.data);
+      localStorage.setItem('ck_customer', JSON.stringify(data.data));
+      localStorage.setItem('ck_customer_token', data.data.token);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Registration failed');
+      toast.error(error.response?.data?.message || 'Signup failed');
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('ck_customer');
+    localStorage.removeItem('ck_customer_token');
+    setCurrentCustomer(null);
+    setActiveOrders([]);
+    toast.success('Logged out successfully');
   };
 
   const getStatusColor = (status) => {
@@ -226,6 +252,215 @@ const PublicCartPage = () => {
     return steps.indexOf(status);
   };
 
+  if (!currentCustomer) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 animate-fade-in text-left">
+        {/* Back Button */}
+        <div className="mb-6">
+          <Link to="/menu" className="inline-flex items-center gap-2 text-sm font-semibold text-surface-600 hover:text-orange-600 transition-colors">
+            <HiOutlineArrowLeft />
+            Back to Food Menu
+          </Link>
+        </div>
+
+        {/* Customer Authentication Panel */}
+        <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-xl">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-black text-surface-900 tracking-tight flex items-center justify-center gap-2">
+              <HiOutlineShoppingCart className="text-orange-500" />
+              <span>Checkout Order</span>
+            </h1>
+            <p className="text-xs text-surface-700/60 mt-1">Sign in or register to complete your order</p>
+          </div>
+
+          <div className="flex border-b border-surface-100 mb-6">
+            <button
+              onClick={() => setActiveTab('login')}
+              className={`flex-1 pb-3 text-sm font-bold border-b-2 transition-all ${
+                activeTab === 'login'
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-surface-700/60 hover:text-surface-900'
+              }`}
+            >
+              Customer Login
+            </button>
+            <button
+              onClick={() => setActiveTab('signup')}
+              className={`flex-1 pb-3 text-sm font-bold border-b-2 transition-all ${
+                activeTab === 'signup'
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-surface-700/60 hover:text-surface-900'
+              }`}
+            >
+              Create New Account
+            </button>
+          </div>
+
+          {/* Login Tab */}
+          {activeTab === 'login' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Email Address</label>
+                <div className="relative">
+                  <HiOutlineMail className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. amit@customer.com"
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Password</label>
+                <div className="relative">
+                  <HiOutlineLockClosed className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter password"
+                    value={loginForm.password}
+                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Demo credentials hint box */}
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3.5">
+                <span className="text-[10px] uppercase font-bold text-orange-800 tracking-wider">Demo Customer Credentials:</span>
+                <p className="text-xs text-surface-800 mt-1">
+                  Email: <span className="font-bold">amit@customer.com</span> | Password: <span className="font-bold">customer123</span> (Amit Shah)
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-650 text-white rounded-xl text-sm font-bold transition-all shadow-md"
+              >
+                Authenticate & Sign In
+              </button>
+            </form>
+          )}
+
+          {/* Signup Tab */}
+          {activeTab === 'signup' && (
+            <form onSubmit={handleSignupSubmit} className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Full Name *</label>
+                  <div className="relative">
+                    <HiOutlineUser className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Amit Shah"
+                      value={signupForm.name}
+                      onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Phone Number *</label>
+                  <div className="relative">
+                    <HiOutlinePhone className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. 8765432102"
+                      value={signupForm.phone}
+                      onChange={(e) => setSignupForm({ ...signupForm, phone: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Email Address *</label>
+                  <div className="relative">
+                    <HiOutlineMail className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. name@example.com"
+                      value={signupForm.email}
+                      onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-surface-750 uppercase tracking-wider mb-1.5">Password *</label>
+                  <div className="relative">
+                    <HiOutlineLockClosed className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-700/40" size={18} />
+                    <input
+                      type="password"
+                      required
+                      placeholder="Create strong password"
+                      value={signupForm.password}
+                      onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Section */}
+              <div className="border-t border-surface-100 pt-3">
+                <h4 className="text-xs font-bold text-surface-900 flex items-center gap-1.5 mb-2.5">
+                  <HiOutlineHome className="text-orange-500" />
+                  <span>Delivery Address details</span>
+                </h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-3">
+                    <input
+                      type="text"
+                      placeholder="Street Address (e.g. 22 Andheri West)"
+                      value={signupForm.street}
+                      onChange={(e) => setSignupForm({ ...signupForm, street: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="text"
+                      placeholder="City (e.g. Mumbai)"
+                      value={signupForm.city}
+                      onChange={(e) => setSignupForm({ ...signupForm, city: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Pincode"
+                      value={signupForm.pincode}
+                      onChange={(e) => setSignupForm({ ...signupForm, pincode: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-650 text-white rounded-xl text-sm font-bold transition-all shadow-md"
+              >
+                Create Account & Register
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in text-left">
       {/* Back Button */}
@@ -236,9 +471,9 @@ const PublicCartPage = () => {
         </Link>
       </div>
 
-      {/* Split Page Side-Menu Layout */}
+      {/* Split Page Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left 8 columns: Cart checkout & customer setup */}
+        {/* Left 8 columns: Cart checkout & Auth Forms */}
         <div className="lg:col-span-8 space-y-6">
           {/* Section Header */}
           <div className="border-b border-surface-100 pb-4">
@@ -246,53 +481,28 @@ const PublicCartPage = () => {
               <HiOutlineShoppingCart className="text-orange-500" />
               <span>Checkout Order</span>
             </h1>
-            <p className="text-sm text-surface-700/60 mt-1">Review your basket, select customer details, and finalize order.</p>
+            <p className="text-sm text-surface-700/60 mt-1">Review your basket, and confirm order.</p>
           </div>
 
-          {/* Customer Selection Card */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-bold text-surface-900 text-base">Select Customer Account</h3>
-                <p className="text-xs text-surface-700/50">Identify who is placing this simulated order.</p>
+          {/* Logged In Customer Profile Card */}
+          <div className="bg-white border border-surface-200/85 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center font-black text-white text-lg">
+                {currentCustomer.name.slice(0, 2).toUpperCase()}
               </div>
-              <button
-                onClick={() => setShowNewCustomerModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-all shadow-md"
-              >
-                <HiOutlineUserAdd size={16} />
-                Register New User
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
-                <label className="block text-xs font-bold text-surface-700 uppercase tracking-wider mb-1.5">Customer Name & Phone</label>
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 text-surface-800 font-semibold"
-                >
-                  {customers.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name} ({c.phone || c.email})
-                    </option>
-                  ))}
-                </select>
+                <h3 className="font-bold text-surface-900 text-base">{currentCustomer.name}</h3>
+                <p className="text-xs text-surface-700/60 font-semibold">{currentCustomer.email} | {currentCustomer.phone}</p>
               </div>
-
-              {selectedCustomerId && (
-                <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-3.5 flex flex-col justify-center">
-                  <span className="text-[10px] uppercase font-bold text-orange-800/80 tracking-wider">Simulated Delivery Address</span>
-                  <span className="text-xs font-medium text-surface-800 mt-1 leading-snug">
-                    {customers.find(c => c._id === selectedCustomerId)?.addresses?.[0]
-                      ? `${customers.find(c => c._id === selectedCustomerId).addresses[0].street}, ${customers.find(c => c._id === selectedCustomerId).addresses[0].city}, ${customers.find(c => c._id === selectedCustomerId).addresses[0].pincode}`
-                      : 'No address registered. Default address will be applied.'
-                    }
-                  </span>
-                </div>
-              )}
             </div>
+            
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-2 border border-surface-200 text-surface-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-xs font-bold transition-all"
+            >
+              <HiOutlineLogout size={16} />
+              Sign Out
+            </button>
           </div>
 
           {/* Cart Items Details List */}
@@ -350,9 +560,14 @@ const PublicCartPage = () => {
                 <div className="pt-4 flex justify-end">
                   <button
                     onClick={handleCheckout}
-                    className="px-8 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-650 text-white rounded-xl text-sm font-bold shadow-lg shadow-orange-500/20"
+                    disabled={!currentCustomer}
+                    className={`px-8 py-3 rounded-xl text-sm font-bold shadow-lg transition-all ${
+                      currentCustomer
+                        ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-650 text-white shadow-orange-500/20'
+                        : 'bg-surface-100 text-surface-400 cursor-not-allowed shadow-none'
+                    }`}
                   >
-                    Confirm & Place Order
+                    {!currentCustomer ? 'Sign in to Place Order' : 'Confirm & Place Order'}
                   </button>
                 </div>
               </div>
@@ -368,7 +583,12 @@ const PublicCartPage = () => {
               <span>Live Order Tracker</span>
             </h2>
 
-            {activeOrders.length === 0 ? (
+            {!currentCustomer ? (
+              <div className="text-center py-8">
+                <span className="text-3xl block mb-1">🔐</span>
+                <p className="text-xs text-surface-700/50">Please log in to view active order tickets.</p>
+              </div>
+            ) : activeOrders.length === 0 ? (
               <div className="text-center py-8">
                 <span className="text-3xl block mb-1">⏱️</span>
                 <p className="text-xs text-surface-700/50">No active tickets for this customer profile.</p>
@@ -421,101 +641,6 @@ const PublicCartPage = () => {
           </div>
         </div>
       </div>
-
-      {/* New Customer Dialog Modal */}
-      {showNewCustomerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl border border-surface-200 max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-up text-left">
-            <div>
-              <h3 className="text-lg font-black text-surface-900">Register Simulated Customer</h3>
-              <p className="text-xs text-surface-700/60">Create a customer profile to simulate ordering meals.</p>
-            </div>
-            <form onSubmit={handleRegisterCustomer} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-surface-750 mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Amit Shah"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-surface-750 mb-1">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. amit@example.com"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-surface-750 mb-1">Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. 8765432102"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-surface-750 mb-1">Street Address</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 22 Andheri West"
-                    value={newCustomer.street}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, street: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-surface-750 mb-1">City</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Mumbai"
-                    value={newCustomer.city}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-surface-750 mb-1">Pincode</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 400058"
-                    value={newCustomer.pincode}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, pincode: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-surface-100">
-                <button
-                  type="button"
-                  onClick={() => setShowNewCustomerModal(false)}
-                  className="px-4 py-2 text-sm font-semibold text-surface-700 hover:bg-surface-100 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-650 rounded-xl transition-all shadow-md"
-                >
-                  Register
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

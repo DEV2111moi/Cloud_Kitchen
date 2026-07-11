@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getMenu } from '../../api/publicApi';
 import {
   HiOutlineSearch, HiOutlineShoppingCart, HiOutlineTrash,
@@ -10,6 +10,7 @@ import { formatCurrency } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
 const PublicMenuPage = () => {
+  const navigate = useNavigate();
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -72,6 +73,7 @@ const PublicMenuPage = () => {
   };
 
   const addToCart = (item) => {
+
     if (cart.length > 0 && cart[0].homeCookId._id !== item.homeCookId._id) {
       const confirmClear = window.confirm(
         `Your cart contains items from "${cart[0].homeCookId.name}". Clear cart and order from "${item.homeCookId.name}" instead?`

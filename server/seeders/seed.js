@@ -145,11 +145,12 @@ const seedDB = async () => {
     console.log(`👩‍🍳 ${homeCooks.length} Home Cooks created`);
 
     // Create Customers
-    const customers = await Customer.insertMany([
+    const customers = await Customer.create([
       {
         name: 'Rahul Verma',
         email: 'rahul@customer.com',
         phone: '8765432100',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '15 Sector 44', city: 'Noida', state: 'UP', pincode: '201301' }],
         status: 'active',
         totalOrders: 45,
@@ -160,6 +161,7 @@ const seedDB = async () => {
         name: 'Sneha Gupta',
         email: 'sneha@customer.com',
         phone: '8765432101',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '78 Whitefield', city: 'Bangalore', state: 'Karnataka', pincode: '560066' }],
         status: 'active',
         totalOrders: 78,
@@ -170,6 +172,7 @@ const seedDB = async () => {
         name: 'Amit Shah',
         email: 'amit@customer.com',
         phone: '8765432102',
+        password: 'customer123',
         addresses: [
           { label: 'Home', street: '22 Andheri West', city: 'Mumbai', state: 'Maharashtra', pincode: '400058' },
           { label: 'Office', street: '45 BKC', city: 'Mumbai', state: 'Maharashtra', pincode: '400051' },
@@ -183,6 +186,7 @@ const seedDB = async () => {
         name: 'Divya Menon',
         email: 'divya@customer.com',
         phone: '8765432103',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '9 Adyar', city: 'Chennai', state: 'Tamil Nadu', pincode: '600020' }],
         status: 'active',
         totalOrders: 34,
@@ -193,6 +197,7 @@ const seedDB = async () => {
         name: 'Vikram Singh',
         email: 'vikram@customer.com',
         phone: '8765432104',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '56 Civil Lines', city: 'Jaipur', state: 'Rajasthan', pincode: '302006' }],
         status: 'blocked',
         totalOrders: 12,
@@ -203,6 +208,7 @@ const seedDB = async () => {
         name: 'Neha Kapoor',
         email: 'neha@customer.com',
         phone: '8765432105',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '33 Connaught Place', city: 'Delhi', state: 'Delhi', pincode: '110001' }],
         status: 'active',
         totalOrders: 67,
@@ -213,6 +219,7 @@ const seedDB = async () => {
         name: 'Arjun Reddy',
         email: 'arjun@customer.com',
         phone: '8765432106',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '89 Jubilee Hills', city: 'Hyderabad', state: 'Telangana', pincode: '500033' }],
         status: 'active',
         totalOrders: 91,
@@ -223,6 +230,7 @@ const seedDB = async () => {
         name: 'Pooja Nair',
         email: 'pooja@customer.com',
         phone: '8765432107',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '12 MG Road', city: 'Kochi', state: 'Kerala', pincode: '682016' }],
         status: 'active',
         totalOrders: 56,
@@ -233,6 +241,7 @@ const seedDB = async () => {
         name: 'Karan Malhotra',
         email: 'karan@customer.com',
         phone: '8765432108',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '44 Salt Lake', city: 'Kolkata', state: 'West Bengal', pincode: '700091' }],
         status: 'active',
         totalOrders: 28,
@@ -243,6 +252,7 @@ const seedDB = async () => {
         name: 'Riya Das',
         email: 'riya@customer.com',
         phone: '8765432109',
+        password: 'customer123',
         addresses: [{ label: 'Home', street: '67 Park Street', city: 'Kolkata', state: 'West Bengal', pincode: '700016' }],
         status: 'active',
         totalOrders: 43,
