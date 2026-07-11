@@ -14,6 +14,7 @@ import DeliveryPartnerListPage from './pages/deliveryPartners/DeliveryPartnerLis
 import PublicLandingPage from './pages/public/PublicLandingPage';
 import PublicMenuPage from './pages/public/PublicMenuPage';
 import PublicRegisterCookPage from './pages/public/PublicRegisterCookPage';
+import PublicCartPage from './pages/public/PublicCartPage';
 
 // Cook Pages
 import CookDashboardPage from './pages/cook/CookDashboardPage';
@@ -48,6 +49,7 @@ function App() {
             <Route path="/" element={<PublicLandingPage />} />
             <Route path="/menu" element={<PublicMenuPage />} />
             <Route path="/register-cook" element={<PublicRegisterCookPage />} />
+            <Route path="/cart" element={<PublicCartPage />} />
           </Route>
 
           {/* Auth Routes */}

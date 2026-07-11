@@ -1,10 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { HiOutlineMenu, HiOutlineX } from 'react-icons/hi';
+import { HiOutlineMenu, HiOutlineX, HiOutlineShoppingCart } from 'react-icons/hi';
 
 const PublicLayout = () => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const location = useLocation();
+
+  const updateCount = () => {
+    const saved = localStorage.getItem('ck_cart');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const count = parsed.reduce((sum, item) => sum + item.quantity, 0);
+        setCartCount(count);
+      } catch (e) {
+        setCartCount(0);
+      }
+    } else {
+      setCartCount(0);
+    }
+  };
+
+  useEffect(() => {
+    updateCount();
+    window.addEventListener('cartUpdate', updateCount);
+    const interval = setInterval(updateCount, 1500);
+    return () => {
+      window.removeEventListener('cartUpdate', updateCount);
+      clearInterval(interval);
+    };
+  }, []);
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -41,9 +67,28 @@ const PublicLayout = () => {
                   {link.label}
                 </Link>
               ))}
+
+              {/* Shopping Cart Link */}
+              <Link
+                to="/cart"
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  location.pathname === '/cart'
+                    ? 'bg-orange-50 text-orange-600'
+                    : 'text-surface-700 hover:text-orange-600 hover:bg-orange-50/50'
+                }`}
+              >
+                <HiOutlineShoppingCart size={18} />
+                <span>Cart</span>
+                {cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full h-4 min-w-4 px-1.5 flex items-center justify-center animate-pulse">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+
               <Link
                 to="/login"
-                className="ml-3 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/25"
+                className="ml-3 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-6-600 transition-all shadow-lg shadow-orange-500/25"
               >
                 Staff Login
               </Link>
@@ -74,6 +119,28 @@ const PublicLayout = () => {
                   {link.label}
                 </Link>
               ))}
+              
+              {/* Mobile Cart Link */}
+              <Link
+                to="/cart"
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium ${
+                  location.pathname === '/cart'
+                    ? 'bg-orange-50 text-orange-600'
+                    : 'text-surface-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <HiOutlineShoppingCart size={18} />
+                  <span>Cart</span>
+                </div>
+                {cartCount > 0 && (
+                  <span className="bg-red-500 text-white text-[9px] font-black rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+
               <Link
                 to="/login"
                 onClick={() => setMenuOpen(false)}
