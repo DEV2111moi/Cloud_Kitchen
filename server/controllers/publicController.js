@@ -2,12 +2,13 @@ const MenuItem = require('../models/MenuItem');
 const HomeCook = require('../models/HomeCook');
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
+const DeliveryPartner = require('../models/DeliveryPartner');
 
 // @desc    Get all available menu items (public)
 // @route   GET /api/public/menu
 exports.getMenu = async (req, res) => {
   try {
-    const { category, cuisine, search, veg, sort } = req.query;
+    const { category, cuisine, search, veg, sort, city } = req.query;
     const query = { isAvailable: true };
 
     if (category && category !== 'all') {
@@ -30,8 +31,12 @@ exports.getMenu = async (req, res) => {
       ];
     }
 
-    // Only show items from approved home cooks
-    const approvedCooks = await HomeCook.find({ status: 'approved' }).select('_id');
+    // Only show items from approved home cooks in the selected city
+    const cookQuery = { status: 'approved' };
+    if (city && city !== 'all') {
+      cookQuery['address.city'] = { $regex: new RegExp(`^${city}$`, 'i') };
+    }
+    const approvedCooks = await HomeCook.find(cookQuery).select('_id');
     query.homeCookId = { $in: approvedCooks.map(c => c._id) };
 
     let sortOption = { createdAt: -1 };
@@ -42,7 +47,7 @@ exports.getMenu = async (req, res) => {
 
     const menuItems = await MenuItem.find(query)
       .sort(sortOption)
-      .populate('homeCookId', 'name rating speciality')
+      .populate('homeCookId', 'name rating speciality address')
       .lean();
 
     // Get unique categories for filter
@@ -64,9 +69,14 @@ exports.getMenu = async (req, res) => {
 // @route   GET /api/public/home-cooks
 exports.getFeaturedCooks = async (req, res) => {
   try {
-    const cooks = await HomeCook.find({ status: 'approved' })
+    const { city } = req.query;
+    const cookQuery = { status: 'approved' };
+    if (city && city !== 'all') {
+      cookQuery['address.city'] = { $regex: new RegExp(`^${city}$`, 'i') };
+    }
+    const cooks = await HomeCook.find(cookQuery)
       .sort({ rating: -1 })
-      .select('name speciality rating totalOrders bio profileImage')
+      .select('name speciality rating totalOrders bio profileImage address')
       .lean();
 
     res.json({ success: true, data: cooks });
@@ -159,9 +169,44 @@ exports.registerCustomer = async (req, res) => {
 // @route   POST /api/public/orders
 exports.placeOrder = async (req, res) => {
   try {
-    const order = await Order.create(req.body);
+    const { homeCookId } = req.body;
+    
+    // Find the home cook to know their city
+    const cook = await HomeCook.findById(homeCookId);
+    const cookCity = cook && cook.address && cook.address.city ? cook.address.city : null;
+
+    let deliveryPartnerId = null;
+    if (cookCity) {
+      // Find an approved and available delivery partner in the cook's city
+      const availablePartner = await DeliveryPartner.findOne({
+        status: 'approved',
+        isAvailable: true,
+        city: { $regex: new RegExp(`^${cookCity}$`, 'i') }
+      });
+
+      if (availablePartner) {
+        deliveryPartnerId = availablePartner._id;
+      }
+    }
+
+    const orderData = { ...req.body };
+    if (deliveryPartnerId) {
+      orderData.deliveryPartnerId = deliveryPartnerId;
+    }
+
+    const order = await Order.create(orderData);
+
+    if (deliveryPartnerId) {
+      // Mark delivery partner as unavailable and set current order
+      await DeliveryPartner.findByIdAndUpdate(deliveryPartnerId, {
+        currentOrderId: order._id,
+        isAvailable: false
+      });
+    }
+
     const populatedOrder = await Order.findById(order._id)
       .populate('customerId', 'name phone email')
+      .populate('deliveryPartnerId', 'name phone vehicleType')
       .lean();
 
     // Trigger Socket.io notification
@@ -197,7 +242,130 @@ exports.getActiveOrders = async (req, res) => {
       status: { $in: ['placed', 'preparing', 'ready', 'picked'] }
     })
       .populate('homeCookId', 'name phone speciality')
+      .populate('deliveryPartnerId', 'name phone vehicleType')
       .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: orders });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get active orders for delivery partner
+// @route   GET /api/public/orders/delivery/:partnerId
+exports.getDeliveryOrders = async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    const orders = await Order.find({
+      deliveryPartnerId: partnerId,
+      status: { $in: ['placed', 'preparing', 'ready', 'picked'] }
+    })
+      .populate('customerId', 'name phone email')
+      .populate('homeCookId', 'name phone email address')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, data: orders });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update order delivery status (by delivery partner)
+// @route   PUT /api/public/orders/:orderId/delivery-status
+exports.updateDeliveryStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body; // should be 'picked' or 'delivered'
+
+    if (!['picked', 'delivered'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid delivery status' });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    order.status = status;
+    if (status === 'delivered') {
+      order.paymentStatus = 'paid';
+    }
+    await order.save();
+
+    // If delivered, release the delivery partner
+    if (status === 'delivered' && order.deliveryPartnerId) {
+      await DeliveryPartner.findByIdAndUpdate(order.deliveryPartnerId, {
+        currentOrderId: null,
+        isAvailable: true,
+        $inc: { totalDeliveries: 1, earnings: 150 }
+      });
+    }
+
+    const populatedOrder = await Order.findById(orderId)
+      .populate('customerId', 'name phone email')
+      .populate('homeCookId', 'name phone email address')
+      .populate('deliveryPartnerId', 'name phone vehicleType')
+      .lean();
+
+    // Trigger Socket.io notification
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orderUpdate', populatedOrder);
+      io.emit('orderStatusUpdated', {
+        orderId: populatedOrder._id,
+        status: populatedOrder.status
+      });
+    }
+
+    res.json({ success: true, data: populatedOrder });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get delivery partner profile & stats
+// @route   GET /api/public/delivery-partner/:partnerId/profile
+exports.getDeliveryPartnerProfile = async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    const partner = await DeliveryPartner.findById(partnerId).lean();
+    if (!partner) {
+      return res.status(404).json({ success: false, message: 'Delivery partner not found' });
+    }
+
+    // Count delivered orders from Order collection for accuracy
+    const deliveredCount = await Order.countDocuments({
+      deliveryPartnerId: partnerId,
+      status: 'delivered'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...partner,
+        totalDelivered: deliveredCount,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get delivered (completed) orders for delivery partner
+// @route   GET /api/public/orders/delivery/:partnerId/history
+exports.getDeliveredOrdersHistory = async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    const orders = await Order.find({
+      deliveryPartnerId: partnerId,
+      status: 'delivered'
+    })
+      .populate('customerId', 'name phone')
+      .populate('homeCookId', 'name address')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
 
     res.json({ success: true, data: orders });
   } catch (error) {

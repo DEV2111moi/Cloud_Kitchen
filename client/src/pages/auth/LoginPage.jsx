@@ -26,6 +26,8 @@ const LoginPage = () => {
       // Redirect based on role
       if (user.role === 'homecook') {
         navigate('/cook');
+      } else if (user.role === 'delivery') {
+        navigate('/delivery');
       } else {
         navigate('/admin');
       }
@@ -164,6 +166,12 @@ const LoginPage = () => {
               <p className="text-xs font-bold text-surface-800 mb-1">🍳 Home Cook Demo Credentials</p>
               <p className="text-xs text-surface-700">
                 <span className="font-semibold">Email:</span> priya@homecook.com | <span className="font-semibold">Pass:</span> cook123
+              </p>
+            </div>
+            <div className="border-t border-surface-200 pt-2">
+              <p className="text-xs font-bold text-surface-800 mb-1">🚴 Delivery Partner Demo Credentials</p>
+              <p className="text-xs text-surface-700">
+                <span className="font-semibold">Email:</span> rajesh@delivery.com | <span className="font-semibold">Pass:</span> delivery123
               </p>
             </div>
           </div>

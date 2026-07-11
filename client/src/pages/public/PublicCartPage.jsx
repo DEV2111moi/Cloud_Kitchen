@@ -145,6 +145,7 @@ const PublicCartPage = () => {
       return;
     }
 
+    const customerAddress = currentCustomer.addresses?.[0] || {};
     const orderData = {
       customerId: currentCustomer._id,
       homeCookId: cart[0].homeCookId._id || cart[0].homeCookId,
@@ -155,10 +156,10 @@ const PublicCartPage = () => {
       })),
       totalAmount: getCartTotal(),
       deliveryAddress: {
-        street: signupForm.street || '22 Andheri West',
-        city: signupForm.city || 'Mumbai',
-        state: signupForm.state || 'Maharashtra',
-        pincode: signupForm.pincode || '400058'
+        street: customerAddress.street || signupForm.street || '10 Main Road',
+        city: customerAddress.city || signupForm.city || localStorage.getItem('ck_selected_city') || 'Coimbatore',
+        state: customerAddress.state || signupForm.state || 'Tamil Nadu',
+        pincode: customerAddress.pincode || signupForm.pincode || '641001'
       },
       paymentMethod: 'cod',
       paymentStatus: 'pending',
@@ -204,10 +205,10 @@ const PublicCartPage = () => {
     }
     try {
       const address = {
-        street: signupForm.street || '456 West Rd',
-        city: signupForm.city || 'Waterloo',
-        state: signupForm.state || 'ON',
-        pincode: signupForm.pincode || 'N2L 3G1'
+        street: signupForm.street || '10 Main Road',
+        city: signupForm.city || localStorage.getItem('ck_selected_city') || 'Coimbatore',
+        state: signupForm.state || 'Tamil Nadu',
+        pincode: signupForm.pincode || '641001'
       };
 
       const { data } = await signupCustomer({
@@ -430,7 +431,7 @@ const PublicCartPage = () => {
                   <div className="col-span-2">
                     <input
                       type="text"
-                      placeholder="City (e.g. Mumbai)"
+                      placeholder="City (e.g. Coimbatore)"
                       value={signupForm.city}
                       onChange={(e) => setSignupForm({ ...signupForm, city: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-surface-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 bg-white"

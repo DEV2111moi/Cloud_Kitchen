@@ -25,11 +25,13 @@ const PublicMenuPage = () => {
   const fetchMenu = async () => {
     setLoading(true);
     try {
+      const selectedCity = localStorage.getItem('ck_selected_city') || 'Coimbatore';
       const { data } = await getMenu({
         category: categoryFilter,
         veg: vegOnly,
         search,
-        sort: sortBy
+        sort: sortBy,
+        city: selectedCity
       });
       setMenuItems(data.data);
       if (data.filters?.categories) {
@@ -50,6 +52,8 @@ const PublicMenuPage = () => {
       } catch (e) {
         console.error(e);
       }
+    } else {
+      setCart([]);
     }
   };
 
@@ -57,6 +61,19 @@ const PublicMenuPage = () => {
     fetchMenu();
     loadCart();
   }, [categoryFilter, vegOnly, sortBy]);
+
+  useEffect(() => {
+    const handleCityUpdate = () => {
+      fetchMenu();
+      loadCart();
+    };
+    window.addEventListener('cityUpdate', handleCityUpdate);
+    const interval = setInterval(loadCart, 1000);
+    return () => {
+      window.removeEventListener('cityUpdate', handleCityUpdate);
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {

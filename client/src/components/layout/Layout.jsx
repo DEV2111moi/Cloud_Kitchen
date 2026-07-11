@@ -8,6 +8,7 @@ const pageTitles = {
   '/home-cooks': 'Home Cook Management',
   '/customers': 'Customer Management',
   '/delivery-partners': 'Delivery Partner Management',
+  '/orders': 'Order Management',
 };
 
 const Layout = () => {

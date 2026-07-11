@@ -8,7 +8,7 @@ const generateToken = (id) => {
   });
 };
 
-// @desc    Login user (admin or homecook)
+// @desc    Login user (admin, homecook, or delivery partner)
 // @route   POST /api/auth/login
 exports.login = async (req, res) => {
   try {
@@ -38,6 +38,21 @@ exports.login = async (req, res) => {
       // Validate admin password
       if (!(await user.matchPassword(password))) {
         return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      }
+    }
+
+    // Try finding delivery partner if still not matched
+    if (!user) {
+      const DeliveryPartner = require('../models/DeliveryPartner');
+      user = await DeliveryPartner.findOne({ email });
+      if (user) {
+        if (password !== 'delivery123' && password !== user.phone) {
+          return res.status(401).json({ success: false, message: 'Invalid email or password' });
+        }
+        if (user.status !== 'approved') {
+          return res.status(403).json({ success: false, message: `Your delivery partner account is ${user.status}. Access denied.` });
+        }
+        role = 'delivery';
       }
     }
 

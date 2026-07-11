@@ -11,7 +11,8 @@ const PublicLandingPage = () => {
   useEffect(() => {
     const fetchCooks = async () => {
       try {
-        const { data } = await getFeaturedCooks();
+        const selectedCity = localStorage.getItem('ck_selected_city') || 'Coimbatore';
+        const { data } = await getFeaturedCooks({ city: selectedCity });
         setFeaturedCooks(data.data.slice(0, 4)); // Show top 4
       } catch (error) {
         console.error('Error fetching cooks:', error);
@@ -20,6 +21,15 @@ const PublicLandingPage = () => {
       }
     };
     fetchCooks();
+
+    const handleCityUpdate = () => {
+      setLoading(true);
+      fetchCooks();
+    };
+    window.addEventListener('cityUpdate', handleCityUpdate);
+    return () => {
+      window.removeEventListener('cityUpdate', handleCityUpdate);
+    };
   }, []);
 
   return (

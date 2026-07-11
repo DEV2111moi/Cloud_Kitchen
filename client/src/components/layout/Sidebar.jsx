@@ -6,6 +6,7 @@ import {
   HiOutlineTruck,
   HiOutlineLogout,
   HiOutlineX,
+  HiOutlineShoppingCart,
 } from 'react-icons/hi';
 import { GiCookingPot } from 'react-icons/gi';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +16,7 @@ const navItems = [
   { to: '/admin/home-cooks', icon: GiCookingPot, label: 'Home Cooks' },
   { to: '/admin/customers', icon: HiOutlineUsers, label: 'Customers' },
   { to: '/admin/delivery-partners', icon: HiOutlineTruck, label: 'Delivery Partners' },
+  { to: '/admin/orders', icon: HiOutlineShoppingCart, label: 'Orders' },
 ];
 
 const Sidebar = ({ isOpen, onClose }) => {

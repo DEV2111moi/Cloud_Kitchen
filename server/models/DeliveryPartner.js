@@ -22,6 +22,12 @@ const deliveryPartnerSchema = new mongoose.Schema({
     enum: ['bike', 'scooter', 'car'],
     default: 'bike',
   },
+  city: {
+    type: String,
+    required: [true, 'City is required'],
+    trim: true,
+    default: 'Coimbatore',
+  },
   vehicleNumber: {
     type: String,
     default: '',

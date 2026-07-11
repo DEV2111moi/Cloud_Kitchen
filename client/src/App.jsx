@@ -4,11 +4,13 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import PublicLayout from './components/layout/PublicLayout';
 import CookLayout from './components/layout/CookLayout';
+import DeliveryLayout from './components/layout/DeliveryLayout';
 import LoginPage from './pages/auth/LoginPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import HomeCookListPage from './pages/homeCooks/HomeCookListPage';
 import CustomerListPage from './pages/customers/CustomerListPage';
 import DeliveryPartnerListPage from './pages/deliveryPartners/DeliveryPartnerListPage';
+import OrderListPage from './pages/orders/OrderListPage';
 
 // Public Pages
 import PublicLandingPage from './pages/public/PublicLandingPage';
@@ -20,6 +22,9 @@ import PublicCartPage from './pages/public/PublicCartPage';
 import CookDashboardPage from './pages/cook/CookDashboardPage';
 import CookOrdersPage from './pages/cook/CookOrdersPage';
 import CookMenuPage from './pages/cook/CookMenuPage';
+
+// Delivery Pages
+import DeliveryDashboardPage from './pages/delivery/DeliveryDashboardPage';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -34,7 +39,13 @@ const GuestRoute = ({ children }) => {
   const { isAuthenticated, loading, user } = useAuth();
   if (loading) return null;
   if (isAuthenticated) {
-    return <Navigate to={user?.role === 'homecook' ? '/cook' : '/admin'} replace />;
+    if (user?.role === 'homecook') {
+      return <Navigate to="/cook" replace />;
+    } else if (user?.role === 'delivery') {
+      return <Navigate to="/delivery" replace />;
+    } else {
+      return <Navigate to="/admin" replace />;
+    }
   }
   return children;
 };
@@ -75,6 +86,7 @@ function App() {
             <Route path="home-cooks" element={<HomeCookListPage />} />
             <Route path="customers" element={<CustomerListPage />} />
             <Route path="delivery-partners" element={<DeliveryPartnerListPage />} />
+            <Route path="orders" element={<OrderListPage />} />
           </Route>
 
           {/* Protected Home Cook Routes */}
@@ -89,6 +101,18 @@ function App() {
             <Route index element={<CookDashboardPage />} />
             <Route path="orders" element={<CookOrdersPage />} />
             <Route path="menu" element={<CookMenuPage />} />
+          </Route>
+
+          {/* Protected Delivery Partner Routes */}
+          <Route
+            path="/delivery"
+            element={
+              <ProtectedRoute>
+                <DeliveryLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<DeliveryDashboardPage />} />
           </Route>
 
           {/* Catch all */}

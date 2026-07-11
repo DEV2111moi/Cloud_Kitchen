@@ -17,6 +17,7 @@ const customerRoutes = require('./routes/customerRoutes');
 const deliveryPartnerRoutes = require('./routes/deliveryPartnerRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const cookRoutes = require('./routes/cookRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 // Connect to database
 connectDB();
@@ -68,6 +69,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/delivery-partners', deliveryPartnerRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/cook', cookRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
